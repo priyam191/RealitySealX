@@ -1,0 +1,2 @@
+# Keep this folder for downloaded reports if you choose to save them locally.
+# The Streamlit app generates reports in memory for download.
