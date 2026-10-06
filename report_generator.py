@@ -11,6 +11,7 @@ from metadata_analyzer import BasicMetadata, metadata_as_dict
 
 
 def build_report_payload(meta: BasicMetadata, ela: ElaResult) -> dict[str, Any]:
+    is_png = (meta.format or "").upper() == "PNG"
     return {
         "project_name": config.PROJECT_NAME,
         "layer": config.PROJECT_LAYER,
@@ -36,7 +37,15 @@ def build_report_payload(meta: BasicMetadata, ela: ElaResult) -> dict[str, Any]:
         ),
         "ela": result_as_dict(ela),
         "heuristic_suspicion_score": ela.suspicion.score,
+        "ela_contrast_score": ela.suspicion.score,
+        "ela_score_label": (
+            "JPEG conversion difference" if is_png else "ELA contrast score"
+        ),
         "indicator_category": ela.suspicion.indicator,
+        "flagged": (
+            not is_png
+            and ela.suspicion.score > config.LOW_SCORE_MAX
+        ),
         "plain_language_headline": ela.suspicion.simple_headline,
         "plain_language_status": ela.suspicion.simple_status,
         "plain_language_explanation": ela.suspicion.simple_explanation,
@@ -112,10 +121,10 @@ def report_text(meta: BasicMetadata, ela: ElaResult) -> str:
             f"Pixel count: {stats['pixel_count']}",
             payload["ela"]["source_mode_note"],
             "",
-            "Heuristic suspicion score",
-            "-------------------------",
-            f"ELA Suspicion Score: {payload['heuristic_suspicion_score']}/100",
-            f"Indicator: {payload['indicator_category']}",
+            "ELA contrast score and result",
+            "-----------------------------",
+            f"{payload['ela_score_label']}: {payload['ela_contrast_score']}/100",
+            f"Result: {payload['indicator_category']}",
             f"Plain-language headline: {payload['plain_language_headline']}",
             f"Simple reading: {payload['plain_language_status']}",
             payload["plain_language_explanation"],

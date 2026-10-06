@@ -22,28 +22,6 @@ def _inject_css() -> None:
         """
         <style>
         .block-container { max-width: 1200px; padding-top: 1.4rem; }
-        .score-box {
-            border: 1px solid #d0d7de;
-            border-radius: 10px;
-            padding: 1rem 1.2rem;
-            background: #f6f8fa;
-        }
-        .warn-box {
-            border-left: 4px solid #d4a017;
-            padding: 0.6rem 0.9rem;
-            background: #fff8e8;
-            margin: 0.6rem 0 1rem 0;
-        }
-        .verdict-card {
-            border-radius: 12px;
-            padding: 1.1rem 1.3rem;
-            margin: 0.4rem 0 1rem 0;
-            border: 1px solid #d0d7de;
-        }
-        .verdict-low { background: #eef8f0; border-color: #8fd19e; }
-        .verdict-mid { background: #fff8e8; border-color: #e0c060; }
-        .verdict-high { background: #fdeeee; border-color: #e08080; }
-        .verdict-card h3 { margin: 0 0 0.35rem 0; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -193,34 +171,49 @@ def main() -> None:
                 st.markdown(f"- {item}")
         return
 
-    st.success("Analysis complete. Start with the plain-language result, then inspect the heatmap.")
+    st.success("Analysis complete.")
     st.info(ela.source_mode_note)
 
     score = ela.suspicion.score
-    if (meta.format or "").upper() == "PNG":
-        verdict_class = "verdict-mid"
-    elif score <= config.LOW_SCORE_MAX:
-        verdict_class = "verdict-low"
-    elif score <= config.MODERATE_SCORE_MAX:
-        verdict_class = "verdict-mid"
-    else:
-        verdict_class = "verdict-high"
-    st.markdown("#### What this means (plain language)")
-    st.markdown(
-        f'<div class="verdict-card {verdict_class}">'
-        f"<h3>{ela.suspicion.simple_headline}</h3>"
-        f"<p><strong>Simple reading:</strong> {ela.suspicion.simple_status}</p>"
-        f"<p><strong>Pattern score:</strong> {ela.suspicion.score}/100 "
-        f"(strength of this test's signal, not the chance the image was edited) "
-        f"&nbsp;|&nbsp; {ela.suspicion.indicator}</p>"
-        f"<p>{ela.suspicion.simple_explanation}</p>"
-        f"<p>{ela.suspicion.heatmap_hint}</p>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f'<div class="warn-box">{config.SCORE_WARNING}</div>',
-        unsafe_allow_html=True,
+    is_png = (meta.format or "").upper() == "PNG"
+    st.markdown("#### Result")
+    with st.container(border=True):
+        result_col, score_col = st.columns([2, 1])
+        with result_col:
+            if is_png:
+                st.info(
+                    "**NOT ASSESSED** — PNG-to-JPEG conversion results cannot "
+                    "determine whether a PNG was edited."
+                )
+            elif score <= config.LOW_SCORE_MAX:
+                st.success("**NOT FLAGGED** — no strong suspicious ELA pattern found.")
+            elif score <= config.MODERATE_SCORE_MAX:
+                st.warning(
+                    "**FLAGGED AS SUSPICIOUS** — an unusual ELA pattern was found; "
+                    "review is recommended."
+                )
+            else:
+                st.error(
+                    "**FLAGGED AS HIGHLY SUSPICIOUS** — a strong unusual ELA pattern "
+                    "was found."
+                )
+            st.caption(
+                "A flagged pattern can also come from recompression or camera processing. "
+                "This test alone cannot prove whether an image was edited."
+            )
+        with score_col:
+            score_label = "JPEG conversion difference" if is_png else "ELA contrast score"
+            st.metric(
+                score_label,
+                f"{score}/100",
+                help=(
+                    "Heuristic strength of ELA differences, not the percentage chance "
+                    "that the image was edited."
+                ),
+            )
+            st.progress(score / 100.0)
+    st.caption(
+        "The score is a heuristic signal, not a calibrated probability or proof of editing."
     )
 
     col_a, col_b = st.columns(2)
@@ -265,13 +258,7 @@ def main() -> None:
         f"{ela.statistics.pixel_count}."
     )
 
-    st.markdown("#### ELA Suspicion Score (technical)")
-    st.markdown(
-        f'<div class="score-box"><strong>ELA Suspicion Score: '
-        f"{ela.suspicion.score}/100</strong><br>Indicator: {ela.suspicion.indicator}</div>",
-        unsafe_allow_html=True,
-    )
-    st.progress(ela.suspicion.score / 100.0)
+    st.markdown("#### ELA contrast score details")
     st.write(ela.suspicion.interpretation)
     st.write(_contributor_explanation(ela.suspicion.components))
     with st.expander("Scoring formula and components (inspectable)"):

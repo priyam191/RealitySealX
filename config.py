@@ -78,16 +78,16 @@ INTERPRETATION_MODERATE = (
 )
 
 # Plain-language copy for non-technical readers
-SIMPLE_HEADLINE_LOW = "No clear sign of editing found"
-SIMPLE_STATUS_LOW = "This test found no strong unusual area"
+SIMPLE_HEADLINE_LOW = "Not flagged: no strong unusual pattern found"
+SIMPLE_STATUS_LOW = "Not flagged"
 SIMPLE_BODY_LOW = (
     "In everyday terms: this JPEG check did not find a clear patch that stands "
     "out from the rest of the picture. The image may be unchanged, but this "
     "test can miss edits, so this result is not proof either way."
 )
 
-SIMPLE_HEADLINE_MODERATE = "Some parts look different from the rest"
-SIMPLE_STATUS_MODERATE = "Worth checking more closely"
+SIMPLE_HEADLINE_MODERATE = "Flagged as suspicious: some parts look different"
+SIMPLE_STATUS_MODERATE = "Flagged as suspicious (review recommended)"
 SIMPLE_BODY_MODERATE = (
     "In everyday terms: some parts changed differently when the picture was "
     "re-saved as JPEG. Editing can cause this, but so can messaging apps, "
@@ -95,8 +95,8 @@ SIMPLE_BODY_MODERATE = (
     "not a yes-or-no answer."
 )
 
-SIMPLE_HEADLINE_HIGH = "A strong unusual pattern was found"
-SIMPLE_STATUS_HIGH = "Possible editing or unusual image processing"
+SIMPLE_HEADLINE_HIGH = "Flagged as highly suspicious: a strong pattern was found"
+SIMPLE_STATUS_HIGH = "Flagged as highly suspicious"
 SIMPLE_BODY_HIGH = (
     "In everyday terms: one or more areas changed much more than their "
     "surroundings when re-saved as JPEG. This can happen when a region was "

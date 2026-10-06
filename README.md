@@ -12,7 +12,7 @@ College demonstration target: **7 October 2026**.
 2. Preview the original image (pixels loaded in memory; the original file is not modified).
 3. Recompress an RGB copy as JPEG (default quality 90), compute the absolute pixel difference, amplify it, and show an ELA heatmap.
 4. Report mean / max / standard deviation of the difference map and the percentage of pixels above a configurable threshold.
-5. Show a transparent **ELA Suspicion Score (0–100)** with Low / Moderate / High bands. This is a **heuristic**, not a calibrated probability.
+5. Show a transparent **ELA contrast score (0–100)** and a presentation-aligned result: **Not flagged**, **Flagged as suspicious**, or **Flagged as highly suspicious**. This is a heuristic, not a calibrated probability.
 6. Show basic metadata (format, size, EXIF if present) and a **SHA-256** digest of the uploaded bytes.
 7. Download a text or JSON report. Pixel data are not written into the report.
 
@@ -82,9 +82,9 @@ streamlit run app.py
 
 For **PNG** uploads, the UI states clearly that analysis is **JPEG-recompression-based**, not a native PNG forensic test.
 
-## ELA Suspicion Score (heuristic)
+## ELA contrast score (heuristic)
 
-Displayed as `XX/100` with an indicator **Low / Moderate / High ELA anomaly**.
+Displayed as `XX/100` with a **Not flagged / Flagged as suspicious / Flagged as highly suspicious** result. Scores above the low-score cutoff are flagged; the higher band indicates a stronger unusual pattern.
 
 ```
 score = 100 * (
@@ -98,11 +98,11 @@ score = 100 * (
 )
 ```
 
-Local contrast is weighted more than the image-wide average. Block contrast uses the 95th-percentile block residual and a minimum denominator, while unusual-block counting applies a minimum difference threshold; this avoids enormous ratios when most JPEG residuals are zero. The UI also gives a plain-language reading: no strong unusual area found, worth checking more closely, or a strong unusual pattern that could indicate editing or other processing. This is still a heuristic, not a yes/no proof.
+Local contrast is weighted more than the image-wide average. Block contrast uses the 95th-percentile block residual and a minimum denominator, while unusual-block counting applies a minimum difference threshold; this avoids enormous ratios when most JPEG residuals are zero. The score summarizes seven image-comparison measurements. It measures the strength of an ELA pattern, not the probability an image was edited. PNG inputs are labeled **Not assessed** for suspicious editing because their displayed differences come from conversion to JPEG.
 
-Weights, caps, and Low/Moderate/High cut-offs are in `config.py`. They are **demonstration defaults** and **need calibration on a labelled dataset**. Do not describe them as scientifically proven.
+Weights, caps, and flagging cut-offs are in `config.py`. They are **demonstration defaults** and **need calibration on a labelled dataset**. Do not describe them as scientifically proven.
 
-**Required wording in the UI:** “This is a heuristic ELA score, not a calibrated probability that the image is manipulated.”
+The UI explains that this is a heuristic signal, not a calibrated probability or proof of editing.
 
 The number describes the strength of the pattern in this test. It is not the percentage chance that the image was edited; do not read it as “80% probability fake” or “definitely edited”.
 
@@ -147,9 +147,9 @@ python -m pytest -q
 
 - Additional integrity layers (for example specialised copy-move, noise inconsistency, or learned detectors) with proper evaluation.
 - Provenance recovery (C2PA / content credentials, edit history) when signed assets exist.
-- Calibration of the suspicion score on a labelled dataset with reported error rates.
+- Calibration of the ELA contrast score on a labelled dataset with reported error rates.
 - Video and multi-image case workflows.
 
 ## Expert-panel one-minute summary
 
-This demo shows a working **ELA recompression residual** pipeline with inspectable statistics, an **explicitly heuristic** 0–100 score, basic EXIF/hash context, and a downloadable report. The number is a **weighted combination of four ELA statistics**, not a probability of fakery. Authenticity and full provenance remain **future layers**.
+This demo shows a working **ELA recompression residual** pipeline with inspectable statistics, an **explicitly heuristic** 0–100 ELA contrast score, basic EXIF/hash context, and a downloadable report. The number combines seven ELA measurements; it is not a probability of fakery. Authenticity and full provenance remain **future layers**.

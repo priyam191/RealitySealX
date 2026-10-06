@@ -250,8 +250,8 @@ def _plain_language(score: int, stats: ElaStatistics, original_format: str | Non
     fmt = (original_format or "").upper()
     if fmt == "PNG":
         return (
-            "PNG conversion check only",
-            "JPEG conversion only - not an edit verdict",
+            "Not assessed: PNG conversion check only",
+            "Not assessed for suspicious editing",
             "In everyday terms: this file is PNG, not JPEG. The heatmap can look "
             "active simply because we converted it to JPEG for the test. Look at "
             "whether one patch is much brighter than the rest. A uniformly bright "
@@ -312,20 +312,20 @@ def compute_suspicion_score(
     score = int(round(100.0 * float(np.clip(weighted, 0.0, 1.0))))
 
     if (original_format or "").upper() == "PNG":
-        indicator = "JPEG conversion differences (not an edit verdict)"
+        indicator = "Not assessed (PNG-to-JPEG conversion only)"
         interpretation = (
             "This upload is PNG, so the ELA map comes from converting it to JPEG "
             "for comparison. Its score cannot be used to assess whether the PNG "
             "was edited."
         )
     elif score <= config.LOW_SCORE_MAX:
-        indicator = "Low ELA anomaly"
+        indicator = "Not flagged"
         interpretation = config.INTERPRETATION_LOW
     elif score <= config.MODERATE_SCORE_MAX:
-        indicator = "Moderate ELA anomaly"
+        indicator = "Flagged as suspicious (review recommended)"
         interpretation = config.INTERPRETATION_MODERATE
     else:
-        indicator = "High ELA anomaly"
+        indicator = "Flagged as highly suspicious"
         interpretation = config.INTERPRETATION_HIGH
 
     headline, status, explanation = _plain_language(score, stats, original_format)

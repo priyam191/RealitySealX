@@ -96,7 +96,11 @@ def test_suspicion_score_increases_with_hot_pixels() -> None:
 
 
 def test_png_note_mentions_jpeg_recompression() -> None:
-    png = Image.new("RGB", (32, 32), (8, 9, 10))
+    png_buffer = io.BytesIO()
+    Image.new("RGB", (32, 32), (8, 9, 10)).save(png_buffer, format="PNG")
+    png_buffer.seek(0)
+    png = Image.open(png_buffer)
+    png.load()
     result = analyze_image(png, original_format="PNG")
     assert "JPEG-recompression" in result.source_mode_note
     assert "PNG" in result.suspicion.simple_headline
@@ -141,9 +145,49 @@ def test_plain_language_fields_present() -> None:
 
 def test_png_plain_language_result_explains_conversion_limit() -> None:
     result = analyze_image(Image.new("RGB", (32, 32), (8, 9, 10)), original_format="PNG")
-    assert result.suspicion.simple_status == "JPEG conversion only - not an edit verdict"
+    assert result.suspicion.simple_status == "Not assessed for suspicious editing"
     assert "cannot determine whether the PNG was edited" in result.suspicion.simple_explanation
-    assert result.suspicion.indicator == "JPEG conversion differences (not an edit verdict)"
+    assert result.suspicion.indicator == "Not assessed (PNG-to-JPEG conversion only)"
+
+
+def test_flagged_wording_matches_score_bands() -> None:
+    from ela_analyzer import ElaStatistics
+
+    low = ElaStatistics(0.1, 1, 0.1, 0, 8, 100, block_contrast_ratio=1)
+    moderate = ElaStatistics(3, 30, 4, 8, 8, 100, p99_difference=12, block_contrast_ratio=2)
+    high = ElaStatistics(
+        6, 60, 8, 12, 8, 100, p99_difference=18,
+        block_contrast_ratio=4.5, outlier_block_percent=12,
+    )
+    assert compute_suspicion_score(low).indicator == "Not flagged"
+    assert compute_suspicion_score(moderate).indicator == (
+        "Flagged as suspicious (review recommended)"
+    )
+    assert compute_suspicion_score(high).indicator == "Flagged as highly suspicious"
+
+
+def test_report_exposes_presentation_score_and_flagged_status() -> None:
+    from metadata_analyzer import analyze_file
+    from report_generator import build_report_payload
+
+    image = _solid_jpeg((200, 10, 10), quality=85)
+    ela = analyze_image(image, original_format="JPEG")
+    meta = analyze_file("test.jpg", b"test image bytes", image)
+    report = build_report_payload(meta, ela)
+    assert report["ela_contrast_score"] == ela.suspicion.score
+    assert report["ela_score_label"] == "ELA contrast score"
+    assert report["flagged"] == (ela.suspicion.score > config.LOW_SCORE_MAX)
+
+    png_buffer = io.BytesIO()
+    Image.new("RGB", (32, 32), (8, 9, 10)).save(png_buffer, format="PNG")
+    png_buffer.seek(0)
+    png = Image.open(png_buffer)
+    png.load()
+    png_ela = analyze_image(png, original_format="PNG")
+    png_meta = analyze_file("test.png", b"test PNG bytes", png)
+    png_report = build_report_payload(png_meta, png_ela)
+    assert png_report["ela_score_label"] == "JPEG conversion difference"
+    assert png_report["flagged"] is False
 
 
 def test_load_rejects_bad_extension() -> None:
