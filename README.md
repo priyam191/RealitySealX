@@ -110,12 +110,12 @@ The number describes the strength of the pattern in this test. It is not the per
 
 After `python generate_sample_images.py`, open each file in the app and click **Analyse Image**.
 
-| File | Intended exercise | What to look for |
-| --- | --- | --- |
-| `sample_images/01_unedited.jpg` | Unedited JPEG saved once at quality 90 | Often a relatively even residual field. A **low** score is possible but **does not prove authenticity**. |
-| `sample_images/02_spliced.jpg` | Synthetic splice: a never-compressed high-detail patch pasted onto a JPEG that was already saved | The pasted rectangle should stand out on the heatmap and produce a **higher** score than the unedited example. This is **illustrative of this synthetic construction**, not a general detection guarantee. |
-| `sample_images/03_recompressed.jpg` | Extra JPEG generations of the unedited scene | Recompression **can** flatten or change ELA texture. Social-media-style processing is a known confounder. |
-| `sample_images/04_source.png` | PNG analysed via JPEG recompression | Read the PNG explanation in the UI. Compare with `04_png_converted.jpg`. |
+| File                                | Intended exercise                                                                                | What to look for                                                                                                                                                                                           |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sample_images/01_unedited.jpg`     | Unedited JPEG saved once at quality 90                                                           | Often a relatively even residual field. A **low** score is possible but **does not prove authenticity**.                                                                                                   |
+| `sample_images/02_spliced.jpg`      | Synthetic splice: a never-compressed high-detail patch pasted onto a JPEG that was already saved | The pasted rectangle should stand out on the heatmap and produce a **higher** score than the unedited example. This is **illustrative of this synthetic construction**, not a general detection guarantee. |
+| `sample_images/03_recompressed.jpg` | Extra JPEG generations of the unedited scene                                                     | Recompression **can** flatten or change ELA texture. Social-media-style processing is a known confounder.                                                                                                  |
+| `sample_images/04_source.png`       | PNG analysed via JPEG recompression                                                              | Read the PNG explanation in the UI. Compare with `04_png_converted.jpg`.                                                                                                                                   |
 
 **Do not treat numbers in this README as experimental results.** Run the four cases yourself and record the scores, heatmaps, and metadata for your report. Synthetic images are easier to separate with ELA than many real camera photographs.
 
@@ -153,3 +153,4 @@ python -m pytest -q
 ## Expert-panel one-minute summary
 
 This demo shows a working **ELA recompression residual** pipeline with inspectable statistics, an **explicitly heuristic** 0–100 ELA contrast score, basic EXIF/hash context, and a downloadable report. The number combines seven ELA measurements; it is not a probability of fakery. Authenticity and full provenance remain **future layers**.
+Rajarshi Samaddar
