@@ -2,7 +2,7 @@
 
 **Image Integrity and ELA-Based Tampering Analysis — Prototype**
 
-This repository is a **local, free, CPU-only** demonstration of **one** layer of a larger proposed framework: **Error Level Analysis (ELA)** for still images. It does **not** implement deep-learning detection, C2PA provenance, copy-move search, video analysis, or a legally certified forensic workflow.
+This repository is a **local, CPU-capable** demonstration of ELA for still images, with explicitly unavailable CNN and facial-deepfake ViT status panels, a separate AI-generated-image ViT detector, and an independent-results dashboard. It does **not** yet provide face-manipulation inference, C2PA provenance, copy-move search, video analysis, or a legally certified forensic workflow.
 
 College demonstration target: **7 October 2026**.
 
@@ -15,6 +15,9 @@ College demonstration target: **7 October 2026**.
 5. Show a transparent **ELA contrast score (0–100)** and a presentation-aligned result: **Not flagged**, **Flagged as suspicious**, or **Flagged as highly suspicious**. This is a heuristic, not a calibrated probability.
 6. Show basic metadata (format, size, EXIF if present) and a **SHA-256** digest of the uploaded bytes.
 7. Download a text or JSON report. Pixel data are not written into the report.
+8. View the CNN and ViT tabs, which clearly report that no face/deepfake analysis ran because compatible checkpoints are not configured.
+9. Run the separate AI-generated-image detector explicitly. The first run downloads its model checkpoint; it does not download any datasets.
+10. Review the Combined Analysis Dashboard for per-layer status, ELA/metadata outputs, and the independent-results summary.
 
 ## File structure
 
@@ -22,6 +25,10 @@ College demonstration target: **7 October 2026**.
 RealitySealX/
   app.py                      # Streamlit UI
   ela_analyzer.py             # ELA pipeline and heuristic score
+  cnn_detector.py             # Explicit unavailable status until a compatible checkpoint is configured
+  vit_detector.py             # Explicit unavailable status until a compatible checkpoint is configured
+  ai_image_detector.py        # Community Forensics general AI-generated-image inference
+  result_analyzer.py          # Summary of independent results; no score fusion
   metadata_analyzer.py        # EXIF + SHA-256
   report_generator.py         # Text/JSON reports
   image_io.py                 # Upload validation and safe loading
@@ -33,6 +40,10 @@ RealitySealX/
   sample_images/              # Created by the generator script
   outputs/                    # Optional local report folder
   tests/test_ela_and_hash.py
+  tests/test_cnn_detector.py
+  tests/test_vit_detector.py
+  tests/test_ai_image_detector.py
+  tests/test_result_analyzer.py
 ```
 
 ## Setup (Windows PowerShell)
@@ -105,6 +116,40 @@ Weights, caps, and flagging cut-offs are in `config.py`. They are **demonstratio
 The UI explains that this is a heuristic signal, not a calibrated probability or proof of editing.
 
 The number describes the strength of the pattern in this test. It is not the percentage chance that the image was edited; do not read it as “80% probability fake” or “definitely edited”.
+
+## CNN facial-manipulation layer status
+
+The **CNN Deepfake Detection** tab is currently a status-only module. It reports **Model unavailable** and emits no prediction, confidence, or face-detection result. This is intentional: no compatible checkpoint and matching inference implementation are shipped or configured, so the app must not produce a fabricated result.
+
+Checkpoint research found an Xception model card tagged MIT that says it was trained on StyleGAN-generated faces and depends on a custom model implementation not included with the checkpoint files: [RamadhanZome/deepfake-xception](https://huggingface.co/RamadhanZome/deepfake-xception). Its own stated training domain is too narrow to present as a general facial-manipulation detector. The [FaceForensics++ authors' classification README](https://github.com/ondyari/FaceForensics/blob/master/classification/README.md) links to their Xception models and notes that these models were not fine-tuned for general compressed videos; the cited route does not establish a clear redistribution license. Neither candidate is configured by this project.
+
+Before enabling CNN inference, select a checkpoint with documented architecture, preprocessing, class order, dataset provenance, and license, then evaluate it on a relevant held-out dataset. No model accuracy is claimed here. The current module has no additional dependencies and does not download weights or datasets.
+
+## Vision Transformer deepfake layer status
+
+The **Vision Transformer Detection** tab is currently a status-only module. It reports **Model unavailable** and emits no prediction or confidence until a suitable fine-tuned checkpoint and its preprocessing are verified. No ViT weights or datasets are downloaded by this project.
+
+Checkpoint research identified [ashwin-raikar/vit-deepfake-detector-celebdfv2](https://huggingface.co/ashwin-raikar/vit-deepfake-detector-celebdfv2), whose model card describes a ViT-Base fine-tuned on Celeb-DF v2 and labels the checkpoint Apache-2.0. The card does not provide evaluation metrics or preprocessing details, and the repository has no image-processor configuration; the dataset's reuse terms also require separate verification. It is therefore not configured as a general-purpose detector. The [CommunityForensics ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT) is trained for detecting AI-generated images, which is a separate task and must not be presented as facial-manipulation detection. No accuracy or generalization claim is made for either model.
+
+## AI-generated-image detector
+
+The **AI-Generated Image Detection** tab uses the ViT-Small model from [OwensLab/commfor-model-384](https://huggingface.co/OwensLab/commfor-model-384), based on the [Community Forensics CVPR 2025 work](https://arxiv.org/abs/2411.04125). The model card identifies the checkpoint as MIT-licensed; the model has about 21.8M parameters. The implementation uses the authors' model architecture and evaluation preprocessing: resize the shorter edge to 440 pixels, center-crop to 384×384, convert to RGB, then ImageNet-normalize. The checkpoint is downloaded from the pinned model revision only when the user explicitly runs this tab; it is approximately 87 MB and cached by Hugging Face Hub. Inference uses CPU.
+
+The displayed AI-generated score is a sigmoid model output, not a calibrated probability or proof of origin. The predicted-class score is the model score for the selected class and is also not calibrated. The model is a research classifier and may not generalize to unseen generators, edits, or heavy image processing. Its center crop can omit image edges, and low-resolution images are upscaled.
+
+The optional **ViT attention visualization** averages the final layer's attention from the classification token to image patches and overlays it on the 384×384 model crop. It visualizes model focus only; it is not a manipulated-region map, causal explanation, or proof. No Grad-CAM is available for the unconfigured CNN module, and the face-deepfake ViT has no checkpoint to explain.
+
+To avoid the first-use download in an offline environment, set `REALITYSEAL_AI_MODEL_PATH` to a local compatible `model.safetensors` checkpoint before starting Streamlit.
+
+### Dataset and training notes
+
+Community Forensics contains about 2.7M generated images from 4,803 generator models; its full dataset is about 1.1 TB. The dataset card also offers a smaller ~556K paired-image dataset (~278K generated and ~278K real), but it is licensed CC-BY-NC-SA-4.0 for non-commercial research. The complete dataset combines multiple source datasets with their own terms; review those terms before any training or redistribution. The recommended comprehensive evaluation set is also large. **This project downloads none of these datasets and performs no training.**
+
+CIFAKE contains 120K images (60K real CIFAR-10 images and 60K Stable Diffusion 1.4 synthetic counterparts), useful for introductory experiments, but its 32×32 CIFAR-style images do not establish performance on contemporary, high-resolution image generators. Kaggle marks the license as “Other (specified in description)”; the dataset description says it is published under the same MIT license as CIFAR-10. Verify the current host record and source-image terms before use. CIFAKE alone is insufficient evidence of modern detector performance.
+
+No training is included or performed. The official training repository supports distributed `torchrun` workflows; practical training requires GPUs and substantial storage/compute. The full dataset alone is about 1.1 TB, while the smaller research-only set may require up to ~600 GB including processed cache. No training budget or accuracy is claimed.
+
+The new inference dependencies are PyTorch, torchvision, timm, safetensors, and Hugging Face Hub. They are declared in `requirements.txt`; the base ELA path does not load AI model weights unless this tab is explicitly run.
 
 ## Testing guide
 
