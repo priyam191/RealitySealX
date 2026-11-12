@@ -1,8 +1,8 @@
-# REALITYSEAL-X — ELA prototype
+# REALITYSEAL-X — Image forensics prototype
 
 **Image Integrity and ELA-Based Tampering Analysis — Prototype**
 
-This repository is a **local, CPU-capable** demonstration of ELA for still images, with explicitly unavailable CNN and facial-deepfake ViT status panels, a separate AI-generated-image ViT detector, and an independent-results dashboard. It does **not** yet provide face-manipulation inference, C2PA provenance, copy-move search, video analysis, or a legally certified forensic workflow.
+This repository is a **local, CPU-capable** demonstration of ELA for still images, separate free CNN and ViT deepfake detectors, a separate AI-generated-image ViT detector, and an independent-results dashboard. Model checkpoints are free to download and are fetched only after the user runs the corresponding analysis. It does **not** implement C2PA provenance, copy-move search, video analysis, or a legally certified forensic workflow.
 
 College demonstration target: **7 October 2026**.
 
@@ -15,7 +15,7 @@ College demonstration target: **7 October 2026**.
 5. Show a transparent **ELA contrast score (0–100)** and a presentation-aligned result: **Not flagged**, **Flagged as suspicious**, or **Flagged as highly suspicious**. This is a heuristic, not a calibrated probability.
 6. Show basic metadata (format, size, EXIF if present) and a **SHA-256** digest of the uploaded bytes.
 7. Download a text or JSON report. Pixel data are not written into the report.
-8. View the CNN and ViT tabs, which clearly report that no face/deepfake analysis ran because compatible checkpoints are not configured.
+8. Run the independent CNN face-manipulation detector or ViT deepfake detector; each free model is downloaded and cached on first use.
 9. Run the separate AI-generated-image detector explicitly. The first run downloads its model checkpoint; it does not download any datasets.
 10. Review the Combined Analysis Dashboard for per-layer status, ELA/metadata outputs, and the independent-results summary.
 
@@ -25,8 +25,8 @@ College demonstration target: **7 October 2026**.
 RealitySealX/
   app.py                      # Streamlit UI
   ela_analyzer.py             # ELA pipeline and heuristic score
-  cnn_detector.py             # Explicit unavailable status until a compatible checkpoint is configured
-  vit_detector.py             # Explicit unavailable status until a compatible checkpoint is configured
+  cnn_detector.py             # Haar face detection + EfficientNet-B2 face analysis
+  vit_detector.py             # ViT face/deepfake classification
   ai_image_detector.py        # Community Forensics general AI-generated-image inference
   result_analyzer.py          # Summary of independent results; no score fusion
   metadata_analyzer.py        # EXIF + SHA-256
@@ -117,19 +117,19 @@ The UI explains that this is a heuristic signal, not a calibrated probability or
 
 The number describes the strength of the pattern in this test. It is not the percentage chance that the image was edited; do not read it as “80% probability fake” or “definitely edited”.
 
-## CNN facial-manipulation layer status
+## CNN facial-manipulation detector
 
-The **CNN Deepfake Detection** tab is currently a status-only module. It reports **Model unavailable** and emits no prediction, confidence, or face-detection result. This is intentional: no compatible checkpoint and matching inference implementation are shipped or configured, so the app must not produce a fabricated result.
+The **CNN Deepfake Detection** tab runs the free, Apache-2.0-tagged [DFDS EfficientNet-B2 checkpoint](https://huggingface.co/ThinothW/DFDS-EfficientNet-B2-Deepfake-Detection-Engine). The model card documents the two output labels (`0 = fake`, `1 = real`), 260×260 input, and ImageNet normalization. On first explicit run, the app downloads the checkpoint (~93 MB) and caches it locally. It uses `torch.load(weights_only=True)` and CPU inference.
 
-Checkpoint research found an Xception model card tagged MIT that says it was trained on StyleGAN-generated faces and depends on a custom model implementation not included with the checkpoint files: [RamadhanZome/deepfake-xception](https://huggingface.co/RamadhanZome/deepfake-xception). Its own stated training domain is too narrow to present as a general facial-manipulation detector. The [FaceForensics++ authors' classification README](https://github.com/ondyari/FaceForensics/blob/master/classification/README.md) links to their Xception models and notes that these models were not fine-tuned for general compressed videos; the cited route does not establish a clear redistribution license. Neither candidate is configured by this project.
+The app uses OpenCV's built-in frontal-face Haar cascade, selects the largest detected face, and adds a small border before classification. This local detector is free and does not require a paid API or external face-detection weights. It is less capable than the model author's RetinaFace preprocessing, so this difference can affect results. Profile, occluded, or small faces may not be detected; if no face is found, the result is **Not Applicable - No Face Detected** and no CNN prediction is made.
 
-Before enabling CNN inference, select a checkpoint with documented architecture, preprocessing, class order, dataset provenance, and license, then evaluate it on a relevant held-out dataset. No model accuracy is claimed here. The current module has no additional dependencies and does not download weights or datasets.
+The model was trained on the author's 142,837-image identity-isolated face dataset. The model card reports 96% in-domain accuracy and 67.95% cross-dataset accuracy; these are the author's reported results, not independently tested by this application. The checkpoint is tagged Apache-2.0; dataset terms are separate and should be checked before training or redistribution. The model may not generalize to other manipulation methods. A score is not a calibrated probability or proof.
 
-## Vision Transformer deepfake layer status
+## Vision Transformer deepfake detector
 
-The **Vision Transformer Detection** tab is currently a status-only module. It reports **Model unavailable** and emits no prediction or confidence until a suitable fine-tuned checkpoint and its preprocessing are verified. No ViT weights or datasets are downloaded by this project.
+The **Vision Transformer Detection** tab runs the free Apache-2.0-tagged [dima806 ViT face detector](https://huggingface.co/dima806/deepfake_vs_real_image_detection), pinned to a fixed model revision. Its model config documents `0 = Real`, `1 = Fake`; its image processor specifies 224×224 resizing and its normalization. The app downloads and caches model weights (about 343 MB) and processor files on the first explicit run, then uses local CPU inference. `REALITYSEAL_VIT_MODEL_PATH` can point to an existing local model folder for offline use.
 
-Checkpoint research identified [ashwin-raikar/vit-deepfake-detector-celebdfv2](https://huggingface.co/ashwin-raikar/vit-deepfake-detector-celebdfv2), whose model card describes a ViT-Base fine-tuned on Celeb-DF v2 and labels the checkpoint Apache-2.0. The card does not provide evaluation metrics or preprocessing details, and the repository has no image-processor configuration; the dataset's reuse terms also require separate verification. It is therefore not configured as a general-purpose detector. The [CommunityForensics ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT) is trained for detecting AI-generated images, which is a separate task and must not be presented as facial-manipulation detection. No accuracy or generalization claim is made for either model.
+The model card describes a real-versus-fake face classifier trained on an older face dataset and warns about concept drift from newer generators. Its reported metrics are not independently validated by this project. It classifies the uploaded image independently of the CNN's face crop. Results may disagree, and neither output is proof or a calibrated probability.
 
 ## AI-generated-image detector
 
@@ -137,7 +137,7 @@ The **AI-Generated Image Detection** tab uses the ViT-Small model from [OwensLab
 
 The displayed AI-generated score is a sigmoid model output, not a calibrated probability or proof of origin. The predicted-class score is the model score for the selected class and is also not calibrated. The model is a research classifier and may not generalize to unseen generators, edits, or heavy image processing. Its center crop can omit image edges, and low-resolution images are upscaled.
 
-The optional **ViT attention visualization** averages the final layer's attention from the classification token to image patches and overlays it on the 384×384 model crop. It visualizes model focus only; it is not a manipulated-region map, causal explanation, or proof. No Grad-CAM is available for the unconfigured CNN module, and the face-deepfake ViT has no checkpoint to explain.
+The optional **ViT attention visualization** averages the final layer's attention from the classification token to image patches and overlays it on the 384×384 model crop. It visualizes model focus only; it is not a manipulated-region map, causal explanation, or proof. The currently active deepfake models do not expose a Grad-CAM/attention explanation in the UI.
 
 To avoid the first-use download in an offline environment, set `REALITYSEAL_AI_MODEL_PATH` to a local compatible `model.safetensors` checkpoint before starting Streamlit.
 
@@ -149,7 +149,7 @@ CIFAKE contains 120K images (60K real CIFAR-10 images and 60K Stable Diffusion 1
 
 No training is included or performed. The official training repository supports distributed `torchrun` workflows; practical training requires GPUs and substantial storage/compute. The full dataset alone is about 1.1 TB, while the smaller research-only set may require up to ~600 GB including processed cache. No training budget or accuracy is claimed.
 
-The new inference dependencies are PyTorch, torchvision, timm, safetensors, and Hugging Face Hub. They are declared in `requirements.txt`; the base ELA path does not load AI model weights unless this tab is explicitly run.
+Inference dependencies are PyTorch, torchvision, timm, safetensors, Hugging Face Hub, Transformers, and OpenCV Headless. They are declared in `requirements.txt`. Models are free; an internet connection is needed for each checkpoint's first download unless a local model path is configured. You can set `REALITYSEAL_CNN_MODEL_PATH` to a local `.bin` checkpoint and `REALITYSEAL_VIT_MODEL_PATH` to a local Transformers model folder. No dataset is downloaded for inference or training.
 
 ## Testing guide
 

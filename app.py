@@ -1,5 +1,5 @@
 """
-REALITYSEAL-X Streamlit prototype — ELA layer only.
+REALITYSEAL-X Streamlit image-forensics prototype.
 
 Run locally:
     streamlit run app.py
@@ -19,13 +19,21 @@ from ai_image_detector import (
     analyze_ai_generated_image,
     generate_attention_visualization,
 )
-from cnn_detector import analyze_face_manipulation
+from cnn_detector import (
+    CnnDetectionResult,
+    CnnDetectorError,
+    analyze_face_manipulation,
+)
 from ela_analyzer import ElaResult, analyze_image
 from image_io import ImageLoadError, load_image_from_bytes
 from metadata_analyzer import BasicMetadata, analyze_file
 from report_generator import report_json, report_text
 from result_analyzer import AnalysisSummary, build_analysis_summary
-from vit_detector import analyze_vit_deepfake
+from vit_detector import (
+    VitDetectionResult,
+    VitDetectorError,
+    analyze_vit_deepfake,
+)
 
 
 def _inject_css() -> None:
@@ -212,28 +220,85 @@ def _render_ela_results(ela: ElaResult, meta: BasicMetadata) -> None:
         )
 
 
-def _render_cnn_status() -> None:
-    result = analyze_face_manipulation()
+def _render_cnn_status(image: Image.Image | None) -> None:
     st.subheader("CNN facial manipulation detection")
-    st.caption(result.model_name)
-    st.warning("Model unavailable — no analysis was performed.")
-    st.write(result.explanation)
+    if image is None:
+        st.info("Upload an image to run this detector.")
+        return
+
     st.caption(
-        "A compatible, verified checkpoint and matching inference implementation "
-        "must be configured before this layer can detect faces or classify them."
+        "Free, public EfficientNet-B2 checkpoint. It downloads only when you click "
+        "run; inference stays on this computer. OpenCV detects frontal faces locally."
     )
+    if st.button("Run CNN face manipulation analysis", type="primary"):
+        try:
+            with st.spinner("Detecting face and running EfficientNet-B2 on CPU…"):
+                st.session_state.cnn_result = analyze_face_manipulation(image)
+            st.session_state.cnn_error = None
+        except CnnDetectorError as exc:
+            st.session_state.cnn_result = None
+            st.session_state.cnn_error = str(exc)
+
+    if st.session_state.cnn_error:
+        st.error(f"CNN analysis failed: {st.session_state.cnn_error}")
+
+    result: CnnDetectionResult | None = st.session_state.cnn_result
+    if result is None:
+        st.info("Not run yet. The checkpoint is downloaded only after you start analysis.")
+        return
+    st.caption(f"Model: {result.model_name}")
+    if result.status == "not_applicable":
+        st.info(result.explanation)
+        return
+
+    outcome_col, score_col = st.columns(2)
+    outcome_col.metric("Face manipulation result", result.prediction or "Unavailable")
+    score_col.metric(
+        "Predicted-class model score",
+        f"{result.confidence:.1%}" if result.confidence is not None else "Unavailable",
+        help="Raw model output, not a calibrated probability.",
+    )
+    st.image(result.face_crop, caption="Face crop analyzed by the CNN", width="content")
+    st.write(result.explanation)
 
 
-def _render_vit_status() -> None:
-    result = analyze_vit_deepfake()
+def _render_vit_status(image: Image.Image | None) -> None:
     st.subheader("Vision Transformer deepfake detection")
-    st.caption(result.model_name)
-    st.warning("Model unavailable — no analysis was performed.")
-    st.write(result.explanation)
+    if image is None:
+        st.info("Upload an image to run this detector.")
+        return
+
     st.caption(
-        "A compatible checkpoint with documented training data, preprocessing, "
-        "class labels, and licensing must be approved before this layer can run."
+        "Free Apache-2.0 public ViT checkpoint. It downloads only when you click "
+        "run; inference stays on this computer and uses the model's published processor."
     )
+    if st.button("Run ViT deepfake analysis", type="primary"):
+        try:
+            with st.spinner("Loading ViT and analyzing image on CPU…"):
+                st.session_state.vit_result = analyze_vit_deepfake(image)
+            st.session_state.vit_error = None
+        except VitDetectorError as exc:
+            st.session_state.vit_result = None
+            st.session_state.vit_error = str(exc)
+
+    if st.session_state.vit_error:
+        st.error(f"ViT analysis failed: {st.session_state.vit_error}")
+
+    result: VitDetectionResult | None = st.session_state.vit_result
+    if result is None:
+        st.info("Not run yet. The checkpoint is downloaded only after you start analysis.")
+        return
+
+    st.caption(f"Model: {result.model_name}")
+    outcome_col, score_col = st.columns(2)
+    outcome_col.metric("Deepfake result", result.prediction)
+    score_col.metric(
+        "Predicted-class model score",
+        f"{result.confidence:.1%}",
+        help="Raw model output, not a calibrated probability.",
+    )
+    st.metric("Manipulated class score", f"{result.manipulated_score:.1%}")
+    st.write(result.explanation)
 
 
 def _render_ai_generated_tab(image: Image.Image | None) -> None:
@@ -310,19 +375,24 @@ def _render_combined_dashboard(
         st.info("Upload an image to view its independent analysis results.")
         return
 
-    cnn_result = analyze_face_manipulation()
-    vit_result = analyze_vit_deepfake()
+    cnn_result: CnnDetectionResult | None = st.session_state.cnn_result
+    vit_result: VitDetectionResult | None = st.session_state.vit_result
     summary: AnalysisSummary = build_analysis_summary(
         ela=ela,
         image_format=meta.format if meta is not None else image.format,
         cnn=cnn_result,
         vit=vit_result,
         ai_image=st.session_state.ai_image_result,
+        cnn_error=st.session_state.cnn_error,
+        vit_error=st.session_state.vit_error,
         ai_error=st.session_state.ai_image_error,
     )
 
     st.markdown("#### Independent-results summary")
-    if summary.label == "Suspicious indication detected":
+    if summary.label in {
+        "Suspicious indication detected",
+        "Different models produced conflicting results",
+    }:
         st.warning(f"**{summary.label}** — {summary.explanation}")
     elif summary.label == "Analysis incomplete":
         st.info(f"**{summary.label}** — {summary.explanation}")
@@ -353,12 +423,27 @@ def _render_combined_dashboard(
             st.write(ela.suspicion.indicator)
     with cnn_col:
         st.markdown("**CNN face manipulation**")
-        st.warning("Model unavailable")
-        st.caption(cnn_result.explanation)
+        if cnn_result is None and st.session_state.cnn_error:
+            st.error("Analysis failed")
+            st.caption(st.session_state.cnn_error)
+        elif cnn_result is None:
+            st.info("Not run")
+        elif cnn_result.status == "not_applicable":
+            st.info("Not applicable — no face detected")
+        else:
+            st.write(cnn_result.prediction)
+            if cnn_result.confidence is not None:
+                st.metric("Model score", f"{cnn_result.confidence:.1%}")
     with vit_col:
         st.markdown("**ViT face deepfake**")
-        st.warning("Model unavailable")
-        st.caption(vit_result.explanation)
+        if vit_result is None and st.session_state.vit_error:
+            st.error("Analysis failed")
+            st.caption(st.session_state.vit_error)
+        elif vit_result is None:
+            st.info("Not run")
+        else:
+            st.write(vit_result.prediction)
+            st.metric("Model score", f"{vit_result.confidence:.1%}")
     with ai_col:
         st.markdown("**AI-generated image**")
         ai_result: AiImageDetectionResult | None = st.session_state.ai_image_result
@@ -409,13 +494,15 @@ def _render_combined_dashboard(
         st.caption("Unavailable: " + "; ".join(summary.unavailable_models))
     if summary.not_assessed_layers:
         st.caption("Not assessed: " + "; ".join(summary.not_assessed_layers))
+    if summary.not_run_layers:
+        st.caption("Not run: " + "; ".join(summary.not_run_layers))
     if summary.failed_layers:
         st.caption("Failed: " + "; ".join(summary.failed_layers))
 
 
 def main() -> None:
     st.set_page_config(
-        page_title=f"{config.PROJECT_NAME} — ELA Prototype",
+        page_title=f"{config.PROJECT_NAME} — Image Forensics",
         page_icon="🛡️",
         layout="wide",
     )
@@ -424,9 +511,8 @@ def main() -> None:
     st.title(config.PROJECT_NAME)
     st.subheader(config.PROJECT_SUBTITLE)
     st.caption(
-        f"{config.PROJECT_LAYER}. CPU inference runs locally. The AI-generated "
-        "image tab can fetch a pinned model checkpoint on first use; uploaded "
-        "images are not sent to an inference API."
+        f"{config.PROJECT_LAYER}. Models are free public checkpoints, fetched "
+        "only when you run their independent analysis tabs; inference is local on CPU."
     )
 
     with st.sidebar:
@@ -477,12 +563,22 @@ def main() -> None:
         st.session_state.ai_image_error = None
         st.session_state.ai_attention = None
         st.session_state.ai_attention_error = None
+        st.session_state.cnn_result = None
+        st.session_state.cnn_error = None
+        st.session_state.vit_result = None
+        st.session_state.vit_error = None
     if "ai_image_result" not in st.session_state:
         st.session_state.ai_image_result = None
         st.session_state.ai_image_error = None
     if "ai_attention" not in st.session_state:
         st.session_state.ai_attention = None
         st.session_state.ai_attention_error = None
+    if "cnn_result" not in st.session_state:
+        st.session_state.cnn_result = None
+        st.session_state.cnn_error = None
+    if "vit_result" not in st.session_state:
+        st.session_state.vit_result = None
+        st.session_state.vit_error = None
 
     if uploaded is None:
         st.info("Upload an image, then click **Analyse Image**.")
@@ -496,6 +592,10 @@ def main() -> None:
         st.session_state.ai_image_error = None
         st.session_state.ai_attention = None
         st.session_state.ai_attention_error = None
+        st.session_state.cnn_result = None
+        st.session_state.cnn_error = None
+        st.session_state.vit_result = None
+        st.session_state.vit_error = None
     else:
         if uploaded.name != st.session_state.last_name:
             st.session_state.result = None
@@ -507,6 +607,10 @@ def main() -> None:
             st.session_state.ai_image_error = None
             st.session_state.ai_attention = None
             st.session_state.ai_attention_error = None
+            st.session_state.cnn_result = None
+            st.session_state.cnn_error = None
+            st.session_state.vit_result = None
+            st.session_state.vit_error = None
 
         file_bytes = uploaded.getvalue()
         try:
@@ -564,9 +668,9 @@ def main() -> None:
         else:
             _render_ela_results(ela, meta)
     with cnn_tab:
-        _render_cnn_status()
+        _render_cnn_status(st.session_state.loaded_image)
     with vit_tab:
-        _render_vit_status()
+        _render_vit_status(st.session_state.loaded_image)
     with ai_tab:
         _render_ai_generated_tab(st.session_state.loaded_image)
     with dashboard_tab:
